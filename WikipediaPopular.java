@@ -1,5 +1,7 @@
 import java.io.IOException;
 import java.util.StringTokenizer;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -11,9 +13,11 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
-public class WikiPediaPopular {
+public class WikipediaPopular {
 
-    public static class TokenizerMapper extends Mapper<Object, Text, Text, IntWritable> {
+    private static final Pattern p = Pattern.compile("\\W");
+    
+    public static class TokenizerMapper extends Mapper<Object, Text, Text, IntWritable> {        
 
         private final static IntWritable one = new IntWritable(1);
         private Text word = new Text();
@@ -24,7 +28,7 @@ public class WikiPediaPopular {
                 String line = itr.nextToken();
                 String[] arr = line.split(" ");
                 String pageName = arr[2];
-                if (pageName.startsWith("Special: ") || pageName.equals("Main_Page")) {
+                if (pageName.startsWith("Special: ") || pageName.equals("Main_Page") || containsSpecialChars(pageName)) {
                     continue;
                 }
                 Integer requestedTimes = Integer.parseInt(arr[3]);
@@ -53,7 +57,7 @@ public class WikiPediaPopular {
     public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "word count");
-        job.setJarByClass(WordCount.class);
+        job.setJarByClass(WikipediaPopular.class);
         job.setMapperClass(TokenizerMapper.class);
         job.setCombinerClass(IntSumReducer.class);
         job.setReducerClass(IntSumReducer.class);
@@ -62,5 +66,10 @@ public class WikiPediaPopular {
         FileInputFormat.addInputPath(job, new Path(args[0]));
         FileOutputFormat.setOutputPath(job, new Path(args[1]));
         System.exit(job.waitForCompletion(true) ? 0 : 1);
+    }
+
+    private static boolean containsSpecialChars(String string) {
+        Matcher m = p.matcher(string);
+        return m.find();
     }
 }
