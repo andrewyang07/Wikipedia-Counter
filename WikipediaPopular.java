@@ -1,7 +1,5 @@
 import java.io.IOException;
 import java.util.StringTokenizer;
-import java.util.regex.Pattern;
-import java.util.regex.Matcher;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -15,61 +13,58 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 public class WikipediaPopular {
 
-    private static final Pattern p = Pattern.compile("\\W");
-    
-    public static class TokenizerMapper extends Mapper<Object, Text, Text, IntWritable> {        
+    public static class TokenizerMapper extends Mapper<Object, Text, Text, IntWritable> {
+        private Text date = new Text();
+        private Text lang = new Text();
+        private Text title = new Text();
+        private Text requestedTimes = new Text();
+        private Text size = new Text();
 
-        private final static IntWritable one = new IntWritable(1);
-        private Text word = new Text();
-
-        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+        public void map(Object key, Text value, Context context)
+                throws IOException, InterruptedException, NumberFormatException {
             StringTokenizer itr = new StringTokenizer(value.toString());
-            while (itr.hasMoreTokens()) {
-                String line = itr.nextToken();
-                String[] arr = line.split(" ");
-                String pageName = arr[2];
-                if (pageName.startsWith("Special: ") || pageName.equals("Main_Page") || containsSpecialChars(pageName)) {
-                    continue;
-                }
-                Integer requestedTimes = Integer.parseInt(arr[3]);
-                word.set(pageName);
-                for (int i = 0; i < requestedTimes; i++) {
-                    context.write(word, one);
-                }
+
+            date.set(itr.nextToken());
+            lang.set(itr.nextToken());
+            title.set(itr.nextToken());
+            requestedTimes.set(itr.nextToken());
+            size.set(itr.nextToken());
+
+            if (lang.toString().equals("en") || title.toString().equals("Main_Page")
+                    || title.toString().startsWith("Special:")) {
+                context.write(date, new IntWritable(0));
+                continue;
             }
+            context.write(date, new IntWritable(Integer.parseInt(requestedTimes.toString())));
         }
     }
 
-    public static class IntSumReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
+    public static class GetLargestIntReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
         private IntWritable result = new IntWritable();
 
         public void reduce(Text key, Iterable<IntWritable> values, Context context)
                 throws IOException, InterruptedException {
-            int sum = 0;
-            for (IntWritable val : values) {
-                sum += val.get();
+            int max = 0;
+            for (IntWritable value : values) {
+                max = value.get() > max ? value.get() : max;
             }
-            result.set(sum);
-            context.write(key, result);
+            result.set(max);
+            IntWritable value = new IntWritable(max);
+            context.write(key, value);
         }
     }
 
     public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "word count");
+        Job job = Job.getInstance(conf, "wikipedia popular");
         job.setJarByClass(WikipediaPopular.class);
         job.setMapperClass(TokenizerMapper.class);
-        job.setCombinerClass(IntSumReducer.class);
-        job.setReducerClass(IntSumReducer.class);
+        job.setCombinerClass(GetLargestIntReducer.class);
+        job.setReducerClass(GetLargestIntReducer.class);
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(IntWritable.class);
         FileInputFormat.addInputPath(job, new Path(args[0]));
         FileOutputFormat.setOutputPath(job, new Path(args[1]));
         System.exit(job.waitForCompletion(true) ? 0 : 1);
-    }
-
-    private static boolean containsSpecialChars(String string) {
-        Matcher m = p.matcher(string);
-        return m.find();
     }
 }
