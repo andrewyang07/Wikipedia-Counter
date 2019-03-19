@@ -24,17 +24,28 @@ public class WikipediaPopular {
                 throws IOException, InterruptedException, NumberFormatException {
             StringTokenizer itr = new StringTokenizer(value.toString());
 
+            // date and time
             date.set(itr.nextToken());
+
+            // language type of the wiki page
             lang.set(itr.nextToken());
+
+            // title of the wiki page
             title.set(itr.nextToken());
+
+            // how many time the page was visited
             requestedTimes.set(itr.nextToken());
+
+            // the byte size of requests, we can ignore that
             size.set(itr.nextToken());
 
+            // filter out unwanted records
             if (lang.toString().equals("en") || title.toString().equals("Main_Page")
                     || title.toString().startsWith("Special:")) {
                 context.write(date, new IntWritable(0));
                 continue;
             }
+
             context.write(date, new IntWritable(Integer.parseInt(requestedTimes.toString())));
         }
     }
@@ -45,8 +56,11 @@ public class WikipediaPopular {
         public void reduce(Text key, Iterable<IntWritable> values, Context context)
                 throws IOException, InterruptedException {
             int max = 0;
-            for (IntWritable value : values) {
-                max = value.get() > max ? value.get() : max;
+
+            // iterates over all results from the mapper
+            // and find the records with most visited times
+            for (IntWritable val : values) {
+                max = Math.max(max, val.get());
             }
             result.set(max);
             IntWritable value = new IntWritable(max);
